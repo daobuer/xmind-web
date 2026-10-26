@@ -1,65 +1,108 @@
-# 项目上下文
+# AGENTS.md
 
-### 版本技术栈
+## 项目概览
 
-- **Framework**: Next.js 16 (App Router)
-- **Core**: React 19
-- **Language**: TypeScript 5
-- **UI 组件**: shadcn/ui (基于 Radix UI)
-- **Styling**: Tailwind CSS 4
+网页版思维导图工具，采用前后端分离架构：
+- **前端**：Next.js 16 + React 19（SSR，端口 5000）
+- **后端**：NestJS 12（REST API，端口 5001）
+- **数据库**：SQLite（通过 TypeORM，兼容 MySQL 语法，数据存储在 `/tmp/mindmap.db`）
+
+## 构建与测试命令
+
+```bash
+# 前端
+pnpm ts-check          # TypeScript 类型检查
+pnpm lint:build        # ESLint 检查
+pnpm dev               # 启动开发服务器（端口 5000）
+
+# 后端（server/ 目录）
+cd server && npx nest build    # 构建 NestJS
+cd server && node dist/main    # 启动后端（端口 5001）
+```
 
 ## 目录结构
 
 ```
-├── public/                 # 静态资源
-├── scripts/                # 构建与启动脚本
-│   ├── build.sh            # 构建脚本
-│   ├── dev.sh              # 开发环境启动脚本
-│   ├── prepare.sh          # 预处理脚本
-│   └── start.sh            # 生产环境启动脚本
+── server/                    # NestJS 后端
+│   ├── src/
+│   │   ├── main.ts           # 后端入口
+│   │   ├── app.module.ts     # 根模块
+│   │   ├── database/         # 数据库配置（TypeORM + SQLite）
+│   │   ├── mind-map/         # 思维导图模块（CRUD）
+│   │   │   ├── entities/     # MindMap 实体
+│   │   │   ├── dto/          # 数据传输对象
+│   │   │   ├── mind-map.service.ts
+│   │   │   └── mind-map.controller.ts
+│   │   └── node/             # 节点模块（CRUD + 颜色轮换）
+│   │       ├── entities/     # MindMapNode 实体
+│   │       ├── dto/
+│   │       ├── node.service.ts
+│   │       └── node.controller.ts
+│   ── package.json
 ├── src/
-│   ├── app/                # 页面路由与布局
-│   ├── components/ui/      # Shadcn UI 组件库
-│   ├── hooks/              # 自定义 Hooks
-│   ├── lib/                # 工具库
-│   │   └── utils.ts        # 通用工具函数 (cn)
-│   └── server.ts           # 自定义服务端入口
-├── next.config.ts          # Next.js 配置
-├── package.json            # 项目依赖管理
-└── tsconfig.json           # TypeScript 配置
+│   ├── app/
+│   │   ├── page.tsx          # 思维导图主页面
+│   │   ├── layout.tsx        # 根布局
+│   │   ├── globals.css       # 全局样式
+│   │   └── api/              # Next.js API 代理路由
+│   │       ├── mind-maps/    # 代理到 NestJS /api/mind-maps
+│   │       └── nodes/        # 代理到 NestJS /api/nodes
+│   ├── components/
+│   │   ├── mind-map/         # 思维导图组件
+│   │   │   ├── MindMapCanvas.tsx    # SVG 画布（拖拽/缩放）
+│   │   │   ├── MindMapNode.tsx      # 节点渲染
+│   │   │   ├── ConnectionLine.tsx   # 贝塞尔曲线连线
+│   │   │   └── NodeToolbar.tsx      # 节点操作工具栏
+│   │   └── ui/               # shadcn/ui 组件
+│   ├── lib/
+│   │   ├── api.ts            # API 客户端（类型定义 + 请求函数）
+│   │   └── utils.ts          # 工具函数
+│   └── hooks/                # 自定义 Hooks
+├── .coze                      # 项目配置
+├── tsconfig.json              # TypeScript 配置（排除 server/）
+└── eslint.config.mjs          # ESLint 配置（排除 server/）
 ```
 
-- 项目文件（如 app 目录、pages 目录、components 等）默认初始化到 `src/` 目录下。
+## API 接口
 
-## 包管理规范
+### 思维导图
+- `POST /api/mind-maps` - 创建导图 `{ title, description? }`
+- `GET /api/mind-maps` - 获取所有导图
+- `GET /api/mind-maps/:id` - 获取单个导图（含节点）
+- `PUT /api/mind-maps/:id` - 更新导图
+- `DELETE /api/mind-maps/:id` - 删除导图
 
-**仅允许使用 pnpm** 作为包管理器，**严禁使用 npm 或 yarn**。
-**常用命令**：
-- 安装依赖：`pnpm add <package>`
-- 安装开发依赖：`pnpm add -D <package>`
-- 安装所有依赖：`pnpm install`
-- 移除依赖：`pnpm remove <package>`
+### 节点
+- `POST /api/nodes` - 创建节点 `{ text, mindMapId, parentId?, x?, y?, colorIndex?, priority?, isRoot? }`
+- `GET /api/nodes?mindMapId=xxx` - 获取导图所有节点
+- `GET /api/nodes/:id` - 获取单个节点
+- `PUT /api/nodes/:id` - 更新节点
+- `DELETE /api/nodes/:id` - 删除节点（级联删除子节点）
+- `GET /api/nodes/color/next?parentId=&mindMapId=` - 获取下一个颜色索引
+
+## 核心功能
+
+### 节点边框色轮换
+- 七色顺序：赤(#EF4444) → 橙(#F97316) → 黄(#EAB308) → 绿(#22C55E) → 青(#06B6D4) → 蓝(#3B82F6) → 紫(#A855F7)
+- 自动轮换：创建子节点时，根据同级节点数量自动分配颜色索引（`siblings.length % 7`）
+- 手动设置：通过工具栏颜色选择器手动切换
+
+### 优先级设置
+- P0（无）：灰色，不显示徽章
+- P1（高）：红色徽章
+- P2（中）：橙色徽章
+- P3（低）：灰色徽章
+
+### 画布交互
+- 拖拽空白区域平移画布
+- 滚轮缩放
+- 单击节点选中，显示操作工具栏
+- 双击节点进入编辑模式
+- Enter 保存编辑，Escape 取消
 
 ## 开发规范
 
-### 编码规范
-
-- 默认按 TypeScript `strict` 心智写代码；优先复用当前作用域已声明的变量、函数、类型和导入，禁止引用未声明标识符或拼错变量名。
-- 禁止隐式 `any` 和 `as any`；函数参数、返回值、解构项、事件对象、`catch` 错误在使用前应有明确类型或先完成类型收窄，并清理未使用的变量和导入。
-
-### next.config 配置规范
-
-- 配置的路径不要写死绝对路径，必须使用 path.resolve(__dirname, ...)、import.meta.dirname 或 process.cwd() 动态拼接。
-
-### Hydration 问题防范
-
-1. 严禁在 JSX 渲染逻辑中直接使用 typeof window、Date.now()、Math.random() 等动态数据。**必须使用 'use client' 并配合 useEffect + useState 确保动态内容仅在客户端挂载后渲染**；同时严禁非法 HTML 嵌套（如 <p> 嵌套 <div>）。
-2. **禁止使用 head 标签**，优先使用 metadata，详见文档：https://nextjs.org/docs/app/api-reference/functions/generate-metadata
-   1. 三方 CSS、字体等资源可在 `globals.css` 中顶部通过 `@import` 引入或使用 next/font
-   2. preload, preconnect, dns-prefetch 通过 ReactDOM 的 preload、preconnect、dns-prefetch 方法引入
-   3. json-ld 可阅读 https://nextjs.org/docs/app/guides/json-ld
-
-## UI 设计与组件规范 (UI & Styling Standards)
-
-- 模板默认预装核心组件库 `shadcn/ui`，位于`src/components/ui/`目录下
-- Next.js 项目**必须默认**采用 shadcn/ui 组件、风格和规范，**除非用户指定用其他的组件和规范。**
+- 包管理器：仅使用 pnpm
+- 前端 API 调用通过 Next.js API Routes 代理到 NestJS 后端
+- 数据库使用 SQLite（开发环境），生产环境可切换为 MySQL（修改 `server/src/database/database.module.ts` 中的 TypeORM 配置）
+- NestJS 后端代码被 tsconfig.json 和 eslint.config.mjs 排除，不参与前端静态检查

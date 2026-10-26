@@ -13,5 +13,15 @@ start_service() {
     PORT=${DEPLOY_RUN_PORT} node dist/server.js
 }
 
-echo "Starting HTTP service on port ${DEPLOY_RUN_PORT} for deploy..."
+# Start NestJS backend
+start_nestjs() {
+    cd "${COZE_WORKSPACE_PATH}/server"
+    echo "Starting NestJS backend on port 5001..."
+    SERVER_PORT=5001 node dist/main &
+    NESTJS_PID=$!
+    echo "NestJS backend started (PID: ${NESTJS_PID})"
+    cd "${COZE_WORKSPACE_PATH}"
+}
+
+start_nestjs
 start_service

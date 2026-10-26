@@ -317,6 +317,32 @@ fi
 
 dump_discovered_routes
 
+# Start NestJS backend on port 5001
+NESTJS_LOG="${LOG_DIR}/nestjs.log"
+NESTJS_PID_FILE="${LOG_DIR}/nestjs.pid"
+if [[ -f "${NESTJS_PID_FILE}" ]]; then
+  stop_detached "$(cat "${NESTJS_PID_FILE}" 2>/dev/null || true)"
+  rm -f "${NESTJS_PID_FILE}"
+fi
+
+cd "${COZE_WORKSPACE_PATH}/server"
+if [[ ! -d "dist" ]]; then
+  echo "Building NestJS backend..."
+  npx nest build 2>&1 | tee -a "${NESTJS_LOG}"
+fi
+
+echo "Starting NestJS backend on port 5001..."
+nestjs_pid="$(spawn_detached "${COZE_WORKSPACE_PATH}/server" "${NESTJS_LOG}" \
+  node dist/main)"
+if [[ -n "${nestjs_pid}" ]]; then
+  echo "${nestjs_pid}" > "${NESTJS_PID_FILE}"
+  echo "NestJS backend started (PID: ${nestjs_pid}), listening on port 5001."
+else
+  echo "Warning: NestJS backend failed to start. See ${NESTJS_LOG}." >&2
+fi
+
+cd "${COZE_WORKSPACE_PATH}"
+
 echo "Dev server started (PID: ${server_pid}), listening on port ${DEPLOY_RUN_PORT}."
 if timeout_watchdog_enabled; then
   echo "Auto stop after ${MAX_RUNTIME_SECONDS}s."

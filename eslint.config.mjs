@@ -48,6 +48,8 @@ const eslintConfig = defineConfig([
     'out/',
     'build/',
     'next-env.d.ts',
+    // NestJS backend:
+    'server/',
     // Build artifacts:
     'server.js',
     'dist/',
